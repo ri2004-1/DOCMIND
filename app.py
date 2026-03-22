@@ -100,7 +100,7 @@ def ask_groq(prompt: str, temperature: float = 0.1) -> str:
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama3-8b-8192",
+                "model": "llama-3.1-8b-instant",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 512,
                 "temperature": temperature
@@ -147,7 +147,7 @@ async def delete(filename: str):
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 4
-    model: str = "llama3-8b-8192"
+    model: str = "llama-3.1-8b-instant"
     temperature: float = 0.1
     system_prompt: Optional[str] = None
 

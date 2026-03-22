@@ -1,9 +1,10 @@
 """
 DocMind - RAG Document Assistant
-FREE | Local | No API Key | No ChromaDB | No C++ needed
+Uses Gemini free API for live deployment on Render
+FREE | No ChromaDB | No C++ needed
 """
 
-import pickle
+import pickle, os
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -16,6 +17,9 @@ import requests
 UPLOAD_DIR = Path("./uploads")
 DB_FILE    = Path("./docstore.pkl")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Get Gemini API key from environment variable
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 class SimpleVectorStore:
     def __init__(self):
@@ -87,25 +91,19 @@ def extract_text(path: str, filename: str) -> str:
     except:
         return Path(path).read_text(encoding="utf-8", errors="ignore")
 
-def ask_ollama(prompt: str, model: str = "llama3.2:latest", temperature: float = 0.1) -> str:
+def ask_gemini(prompt: str, temperature: float = 0.1) -> str:
+    if not GEMINI_API_KEY:
+        return "❌ GEMINI_API_KEY not set. Add it in Render environment variables."
     try:
-        r = requests.post(
-            "http://127.0.0.1:11434/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": temperature, "num_predict": 512}
-            },
-            timeout=300
-        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        r = requests.post(url, json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": 512}
+        }, timeout=30)
         if r.status_code != 200:
-            return f"Ollama error {r.status_code}: {r.text}"
-        return r.json().get("response", "No response.")
-    except requests.exceptions.ConnectionError:
-        return "Ollama is not running. Open CMD and run: ollama serve"
-    except requests.exceptions.Timeout:
-        return "Ollama is taking too long. Please wait and try again."
+            return f"Gemini error {r.status_code}: {r.text}"
+        data = r.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -143,7 +141,7 @@ async def delete(filename: str):
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 4
-    model: str = "llama3.2:latest"
+    model: str = "gemini-1.5-flash"
     temperature: float = 0.1
     system_prompt: Optional[str] = None
 
@@ -160,19 +158,19 @@ async def query(req: QueryRequest):
     )
     system = req.system_prompt or "You are DocMind, a precise document assistant. Answer ONLY using the provided context. If not found, say so clearly."
     prompt = f"{system}\n\nDOCUMENT CONTEXT:\n{context}\n\nQUESTION: {req.question}\n\nANSWER:"
-    answer = ask_ollama(prompt, req.model, req.temperature)
+    answer = ask_gemini(prompt, req.temperature)
     sources = [{"source": c["source"], "chunk_idx": c["chunk_idx"], "score": round(s, 3), "preview": c["text"][:180]+"..."} for c, s in results]
     return {"answer": answer, "sources": sources}
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "chunks": len(db.chunks), "cost": "FREE"}
+    return {"status": "ok", "chunks": len(db.chunks), "gemini_key": bool(GEMINI_API_KEY)}
 
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
     print("  DocMind RAG Assistant")
-    print("  FREE | Local | No API Key")
+    print("  Gemini Free API | Render Deployment")
     print("="*50)
     print("  Open: http://localhost:8000\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -95,7 +95,7 @@ def ask_gemini(prompt: str, temperature: float = 0.1) -> str:
     if not GEMINI_API_KEY:
         return "❌ GEMINI_API_KEY not set. Add it in Render environment variables."
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
         r = requests.post(url, json={
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": temperature, "maxOutputTokens": 512}
@@ -141,7 +141,7 @@ async def delete(filename: str):
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 4
-    model: str = "gemini-1.5-flash"
+    model: str = "gemini-2.0-flash"
     temperature: float = 0.1
     system_prompt: Optional[str] = None
 

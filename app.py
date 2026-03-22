@@ -1,7 +1,6 @@
 """
 DocMind - RAG Document Assistant
-Uses Gemini free API for live deployment on Render
-FREE | No ChromaDB | No C++ needed
+Uses Groq FREE API - no credit card, no payment ever
 """
 
 import pickle, os
@@ -18,8 +17,7 @@ UPLOAD_DIR = Path("./uploads")
 DB_FILE    = Path("./docstore.pkl")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Get Gemini API key from environment variable
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 class SimpleVectorStore:
     def __init__(self):
@@ -91,19 +89,27 @@ def extract_text(path: str, filename: str) -> str:
     except:
         return Path(path).read_text(encoding="utf-8", errors="ignore")
 
-def ask_gemini(prompt: str, temperature: float = 0.1) -> str:
-    if not GEMINI_API_KEY:
-        return "❌ GEMINI_API_KEY not set. Add it in Render environment variables."
+def ask_groq(prompt: str, temperature: float = 0.1) -> str:
+    if not GROQ_API_KEY:
+        return "❌ GROQ_API_KEY not set. Add it in Render environment variables."
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-        r = requests.post(url, json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": temperature, "maxOutputTokens": 512}
-        }, timeout=30)
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama3-8b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 512,
+                "temperature": temperature
+            },
+            timeout=30
+        )
         if r.status_code != 200:
-            return f"Gemini error {r.status_code}: {r.text}"
-        data = r.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+            return f"Groq error {r.status_code}: {r.text}"
+        return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -141,7 +147,7 @@ async def delete(filename: str):
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 4
-    model: str = "gemini-2.0-flash"
+    model: str = "llama3-8b-8192"
     temperature: float = 0.1
     system_prompt: Optional[str] = None
 
@@ -158,19 +164,19 @@ async def query(req: QueryRequest):
     )
     system = req.system_prompt or "You are DocMind, a precise document assistant. Answer ONLY using the provided context. If not found, say so clearly."
     prompt = f"{system}\n\nDOCUMENT CONTEXT:\n{context}\n\nQUESTION: {req.question}\n\nANSWER:"
-    answer = ask_gemini(prompt, req.temperature)
+    answer = ask_groq(prompt, req.temperature)
     sources = [{"source": c["source"], "chunk_idx": c["chunk_idx"], "score": round(s, 3), "preview": c["text"][:180]+"..."} for c, s in results]
     return {"answer": answer, "sources": sources}
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "chunks": len(db.chunks), "gemini_key": bool(GEMINI_API_KEY)}
+    return {"status": "ok", "chunks": len(db.chunks), "api": "groq", "key_set": bool(GROQ_API_KEY)}
 
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
     print("  DocMind RAG Assistant")
-    print("  Gemini Free API | Render Deployment")
+    print("  Groq Free API | No Credit Card")
     print("="*50)
     print("  Open: http://localhost:8000\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)

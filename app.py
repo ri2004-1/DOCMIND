@@ -123,6 +123,7 @@ async def root():
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), chunk_size: int = Form(500), chunk_overlap: int = Form(80)):
+    db.delete(file.filename)
     dest = UPLOAD_DIR / file.filename
     dest.write_bytes(await file.read())
     text = extract_text(str(dest), file.filename)
@@ -144,6 +145,13 @@ async def delete(filename: str):
     f = UPLOAD_DIR / filename
     if f.exists(): f.unlink()
     return {"status": "deleted"}
+@app.delete("/clear-all") 
+async def clear_all():
+    db.chunks = []
+    db.save()
+    for f in UPLOAD_DIR.glob("*"):
+        f.unlink()
+    return {"status": "ALL CLEARED"}
 
 class QueryRequest(BaseModel):
     question: str

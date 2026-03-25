@@ -130,7 +130,8 @@ async def upload(file: UploadFile = File(...), chunk_size: int = Form(500), chun
         return JSONResponse({"status": "error", "message": "Could not extract text"}, status_code=400)
     parts = split_text(text, chunk_size, chunk_overlap)
     chunks = [{"text": t, "source": file.filename, "chunk_idx": i} for i, t in enumerate(parts)]
-    db.add(chunks)
+    db.delete(file.filename)
+    db.add(chunks) 
     return {"status": "indexed", "filename": file.filename, "chunks": len(chunks)}
 
 @app.get("/documents")
